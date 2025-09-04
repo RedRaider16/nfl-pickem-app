@@ -469,21 +469,21 @@
                 console.error("Firebase Authentication Error:", e);
                 displayMessage(appErrorMessage, "Authentication failed. The app may not function correctly.", "error");
             }
-
-            // Listen for authentication state changes and set up UI accordingly
-            onAuthStateChanged(auth, (user) => {
-                if (user) {
-                    userId = user.uid;
-                    userIdDisplay.textContent = `Your User ID: ${userId}`;
-                    // Only initialize the UI and listeners once we have a user
-                    generateFormFields();
-                    setupListeners();
-                } else {
-                    // This block can handle sign-out events, though not used in this app
-                    console.log("User signed out or failed to authenticate.");
-                }
-            });
         }
+        
+        // Listen for authentication state changes and set up UI accordingly
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                userId = user.uid;
+                userIdDisplay.textContent = `Your User ID: ${userId}`;
+                // Only initialize the UI and listeners once we have a user
+                generateFormFields();
+                setupListeners();
+            } else {
+                // This block can handle sign-out events, though not used in this app
+                console.log("User signed out or failed to authenticate.");
+            }
+        });
         
         // Start the app when the window is loaded
         window.onload = initApp;
