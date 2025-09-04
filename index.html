@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NFL Pick 'Em | Week 1</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a1a2e;
+            color: #ffffff;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 900px;
+            margin: auto;
+            padding: 1.5rem;
+        }
+        .card {
+            background-color: #2e2e4a;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        input[type="text"], input[type="number"], select {
+            background-color: #3e3e5c;
+            border: 1px solid #5c5c7d;
+            border-radius: 0.5rem;
+            color: #ffffff;
+            padding: 0.5rem 0.75rem;
+            width: 100%;
+        }
+        button {
+            background-color: #ff5722;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #e64a19;
+        }
+        .message-box {
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+            font-weight: 600;
+        }
+        .message-box.success {
+            background-color: #4caf50;
+        }
+        .message-box.error {
+            background-color: #f44336;
+        }
+        .scoreboard-table th, .scoreboard-table td {
+            padding: 0.75rem;
+            text-align: left;
+        }
+        .scoreboard-table thead {
+            background-color: #1a1a2e;
+        }
+        .scoreboard-table tbody tr:nth-child(even) {
+            background-color: #3e3e5c;
+        }
+        /* Specific styles for the Submit Picks button */
+        #submitPicksBtn {
+            background-color: #dc2626; /* A solid red */
+            padding: 1rem 2rem; /* Increased padding for a larger size */
+        }
+        #submitPicksBtn:hover {
+            background-color: #b91c1c; /* A darker red for hover */
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen flex items-center justify-center">
+
+    <div class="container">
+        <div class="text-center mb-6">
+            <h1 class="text-4xl font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-red-600">NFL Pick 'Em | Week 1</h1>
+            <p class="text-lg text-gray-400">Manage your league and view the scoreboard.</p>
+        </div>
+
+        <div class="flex justify-center gap-4 mb-8">
+            <button id="showPicksBtn">Submit Picks</button>
+            <button id="showResultsBtn" class="hidden">Submit Results</button>
+            <button id="showScoreboardBtn">View Scoreboard</button>
+        </div>
+
+        <!-- Pick Submission Form -->
+        <div id="picks-container" class="card">
+            <div class="flex items-center justify-between flex-wrap gap-4 mb-4">
+                <label for="userName" class="block text-gray-300 font-medium w-full md:w-auto">Your Name</label>
+                <input type="text" id="userName" name="userName" placeholder="Enter your name" class="flex-grow md:w-auto">
+            </div>
+            <form id="picksForm">
+                <div id="games-container" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Game pick inputs will be generated here by JavaScript -->
+                </div>
+                <div class="flex justify-center mt-8">
+                    <button type="submit" id="submitPicksBtn" class="w-full md:w-auto text-lg uppercase font-bold">SUBMIT PICKS</button>
+                </div>
+            </form>
+            <div id="picksMessageContainer" class="message-box hidden"></div>
+        </div>
+
+        <!-- Official Results Form (for Commissioner) -->
+        <div id="results-container" class="card hidden">
+            <h2 class="text-2xl font-bold mb-4">Official Game Results</h2>
+            <p class="text-sm text-gray-400 mb-4">Only the league commissioner should fill this out after the games are complete.</p>
+            <form id="resultsForm">
+                <div id="results-games-container" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Game result inputs will be generated here by JavaScript -->
+                </div>
+                <div class="flex justify-center mt-8">
+                    <button type="submit" id="submitResultsBtn" class="w-full md:w-auto">Submit Official Results</button>
+                </div>
+            </form>
+            <div id="resultsMessageContainer" class="message-box hidden"></div>
+        </div>
+
+        <!-- Scoreboard Display -->
+        <div id="scoreboard-container" class="card hidden">
+            <h2 class="text-2xl font-bold mb-4">Current Scoreboard</h2>
+            <div id="scoreboard-table-container" class="overflow-x-auto">
+                <!-- Scoreboard table will be generated here by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDocs, collection, query, setLogLevel, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // Use provided global variables
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        
+        // This is a simplified admin check for demonstration purposes.
+        // In a real application, you would use a more robust role management system.
+        const ADMIN_USER_ID = "replace-with-your-admin-user-id";
+
+        // Set Firebase log level for debugging
+        setLogLevel('debug');
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        let userId = null;
+        let isAuthReady = false;
+        
+        const showPicksBtn = document.getElementById('showPicksBtn');
+        const showResultsBtn = document.getElementById('showResultsBtn');
+        const showScoreboardBtn = document.getElementById('showScoreboardBtn');
+        
+        const picksContainer = document.getElementById('picks-container');
+        const resultsContainer = document.getElementById('results-container');
+        const scoreboardContainer = document.getElementById('scoreboard-container');
+
+        const userNameInput = document.getElementById('userName');
+        const gamesContainer = document.getElementById('games-container');
+        const picksForm = document.getElementById('picksForm');
+        const submitPicksBtn = document.getElementById('submitPicksBtn');
+        const picksMessageContainer = document.getElementById('picksMessageContainer');
+
+        const resultsGamesContainer = document.getElementById('results-games-container');
+        const resultsForm = document.getElementById('resultsForm');
+        const submitResultsBtn = document.getElementById('submitResultsBtn');
+        const resultsMessageContainer = document.getElementById('resultsMessageContainer');
+
+        const scoreboardTableContainer = document.getElementById('scoreboard-table-container');
+
+        // Update GAMES to include team names for dropdown
+        const GAMES = [
+            { name: "Cowboys vs Eagles", teams: ["Cowboys", "Eagles"] },
+            { name: "Chiefs vs Chargers", teams: ["Chiefs", "Chargers"] },
+            { name: "Falcons vs Buccaneers", teams: ["Falcons", "Buccaneers"] },
+            { name: "Bengals vs Browns", teams: ["Bengals", "Browns"] },
+            { name: "Colts vs Dolphins", teams: ["Colts", "Dolphins"] },
+            { name: "Raiders vs Patriots", teams: ["Raiders", "Patriots"] },
+            { name: "Saints vs Cardinals", teams: ["Saints", "Cardinals"] },
+            { name: "Jets vs Steelers", teams: ["Jets", "Steelers"] },
+            { name: "Commanders vs Giants", teams: ["Commanders", "Giants"] },
+            { name: "Jaguars vs Panthers", teams: ["Jaguars", "Panthers"] },
+            { name: "Broncos vs Titans", teams: ["Broncos", "Titans"] },
+            { name: "Seahawks vs 49ers", teams: ["Seahawks", "49ers"] },
+            { name: "Packers vs Lions", teams: ["Packers", "Lions"] },
+            { name: "Rams vs Texans", teams: ["Rams", "Texans"] },
+            { name: "Bills vs Ravens", teams: ["Bills", "Ravens"] },
+            { name: "Vikings vs Bears", teams: ["Vikings", "Bears"] }
+        ];
+
+        // Handle view switching
+        function switchView(view) {
+            picksContainer.classList.add('hidden');
+            resultsContainer.classList.add('hidden');
+            scoreboardContainer.classList.add('hidden');
+
+            if (view === 'picks') {
+                picksContainer.classList.remove('hidden');
+            } else if (view === 'results') {
+                resultsContainer.classList.remove('hidden');
+            } else if (view === 'scoreboard') {
+                scoreboardContainer.classList.remove('hidden');
+            }
+        }
+
+        showPicksBtn.addEventListener('click', () => switchView('picks'));
+        showResultsBtn.addEventListener('click', () => switchView('results'));
+        showScoreboardBtn.addEventListener('click', () => switchView('scoreboard'));
+
+        // Generate form fields for both player picks and official results
+        function generateFormFields() {
+            gamesContainer.innerHTML = '';
+            resultsGamesContainer.innerHTML = '';
+
+            GAMES.forEach((game, index) => {
+                const gameNumber = index + 1;
+
+                // Create pick submission fields
+                const pickGameDiv = document.createElement('div');
+                pickGameDiv.className = 'card';
+                pickGameDiv.innerHTML = `
+                    <h3 class="text-xl font-bold mb-4">${game.name}</h3>
+                    <div class="mb-4">
+                        <label for="winner-${gameNumber}" class="block text-gray-300 text-sm font-medium mb-1">Winning Team</label>
+                        <select id="winner-${gameNumber}" name="winner-${gameNumber}" class="form-select">
+                            <option value="">Select Winner</option>
+                            <option value="${game.teams[0]}">${game.teams[0]}</option>
+                            <option value="${game.teams[1]}">${game.teams[1]}</option>
+                        </select>
+                    </div>
+                    <div class="mb-4">
+                        <label for="confidence-${gameNumber}" class="block text-gray-300 text-sm font-medium mb-1">Confidence Score (1-16)</label>
+                        <select id="confidence-${gameNumber}" name="confidence-${gameNumber}" class="form-select confidence-score" required>
+                            <option value="">Select Score</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="combined-${gameNumber}" class="block text-gray-300 text-sm font-medium mb-1">Combined Score</label>
+                        <input type="number" id="combined-${gameNumber}" name="combined-${gameNumber}" min="0" class="form-input" required>
+                    </div>
+                `;
+                gamesContainer.appendChild(pickGameDiv);
+
+                // Create official results fields
+                const resultGameDiv = document.createElement('div');
+                resultGameDiv.className = 'card';
+                resultGameDiv.innerHTML = `
+                    <h3 class="text-xl font-bold mb-4">${game.name}</h3>
+                    <div class="mb-4">
+                        <label for="official-winner-${index}" class="block text-gray-300 text-sm font-medium mb-1">Official Winner</label>
+                        <input type="text" id="official-winner-${index}" name="official-winner-${index}" placeholder="e.g., Cowboys" class="form-input">
+                    </div>
+                    <div>
+                        <label for="official-combined-${index}" class="block text-gray-300 text-sm font-medium mb-1">Official Combined Score</label>
+                        <input type="number" id="official-combined-${index}" name="official-combined-${index}" min="0" class="form-input">
+                    </div>
+                `;
+                resultsGamesContainer.appendChild(resultGameDiv);
+            });
+
+            // Populate all confidence score dropdowns with 1-16
+            const allConfidenceSelects = document.querySelectorAll('.confidence-score');
+            allConfidenceSelects.forEach(select => {
+                for (let i = 1; i <= 16; i++) {
+                    const option = document.createElement('option');
+                    option.value = i;
+                    option.textContent = i;
+                    select.appendChild(option);
+                }
+            });
+
+            // Add event listeners to enforce unique confidence scores
+            allConfidenceSelects.forEach(select => {
+                select.addEventListener('change', (e) => {
+                    const selectedValue = e.target.value;
+                    allConfidenceSelects.forEach(otherSelect => {
+                        if (otherSelect !== e.target) {
+                            // Find and disable the selected value in other dropdowns
+                            Array.from(otherSelect.options).forEach(option => {
+                                if (option.value === selectedValue) {
+                                    option.disabled = true;
+                                } else {
+                                    // Re-enable options if their value is no longer selected elsewhere
+                                    const isUsed = Array.from(allConfidenceSelects).some(s => s.value === option.value);
+                                    option.disabled = isUsed;
+                                }
+                            });
+                        }
+                    });
+                });
+            });
+        }
+        generateFormFields();
+
+        // Handle user authentication
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                userId = user.uid;
+                // Show the admin button if the user is the admin
+                if (userId === ADMIN_USER_ID) {
+                    showResultsBtn.classList.remove('hidden');
+                } else {
+                    showResultsBtn.classList.add('hidden');
+                }
+                if (userNameInput) {
+                     userNameInput.value = localStorage.getItem('nfl_pickem_user_name') || '';
+                }
+            } else {
+                try {
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch (error) {
+                    console.error("Firebase Auth Error:", error);
+                    userId = crypto.randomUUID();
+                }
+            }
+            isAuthReady = true;
+            if (isAuthReady) {
+                // Attach listeners after auth is ready
+                setupListeners();
+            }
+        });
+
+        function displayMessage(container, message, type) {
+            container.textContent = message;
+            container.className = `message-box ${type}`;
+            container.classList.remove('hidden');
+        }
+
+        // --- Firebase Listener Setup and Scoreboard Logic ---
+        function setupListeners() {
+            const officialResultsRef = doc(db, 'artifacts', appId, 'public', 'data', 'official_results', 'week1');
+            const playersRef = collection(db, 'artifacts', appId, 'users');
+
+            let officialResults = {};
+            let playersData = {};
+
+            onSnapshot(officialResultsRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    officialResults = docSnap.data();
+                    console.log("Official results updated:", officialResults);
+                } else {
+                    officialResults = {};
+                }
+                updateScoreboard(playersData, officialResults);
+            });
+
+            onSnapshot(playersRef, (querySnapshot) => {
+                playersData = {};
+                querySnapshot.forEach((doc) => {
+                    const playerDocId = doc.id;
+                    const picksRef = doc(db, 'artifacts', appId, 'users', playerDocId, 'picks', 'week1');
+                    onSnapshot(picksRef, (picksSnap) => {
+                        if (picksSnap.exists()) {
+                            playersData[playerDocId] = picksSnap.data();
+                        } else {
+                            delete playersData[playerDocId];
+                        }
+                        updateScoreboard(playersData, officialResults);
+                    });
+                });
+            });
+        }
+
+        function calculateScore(picks, officialResults) {
+            let totalScore = 0;
+            if (!officialResults) {
+                return { totalScore: 0 };
+            }
+
+            for (let i = 1; i <= 16; i++) {
+                const gameKey = GAMES[i-1].name;
+                const playerPick = picks[`game${i}`];
+                const officialResult = officialResults[gameKey];
+
+                if (playerPick && officialResult) {
+                    // Part 1: Correct Pick Points
+                    if (playerPick.winner.trim().toLowerCase() === officialResult.winner.toLowerCase()) {
+                        totalScore += playerPick.confidenceScore;
+                    }
+
+                    // Part 2: Combined Score Points
+                    const diff = Math.abs(playerPick.combinedScore - officialResult.combinedScore);
+                    if (diff <= 9) {
+                        totalScore += (10 - diff);
+                    }
+                }
+            }
+            return { totalScore };
+        }
+
+        function updateScoreboard(playersData, officialResults) {
+            const playerScores = [];
+            for (const playerId in playersData) {
+                const picks = playersData[playerId];
+                const scores = calculateScore(picks, officialResults);
+                playerScores.push({
+                    name: picks.userName,
+                    totalScore: scores.totalScore,
+                });
+            }
+
+            // Sort scores by totalScore (descending)
+            playerScores.sort((a, b) => b.totalScore - a.totalScore);
+
+            let tableHtml = `<table class="min-w-full scoreboard-table rounded-lg overflow-hidden">
+                <thead>
+                    <tr>
+                        <th class="py-3 px-4">Rank</th>
+                        <th class="py-3 px-4">Player</th>
+                        <th class="py-3 px-4">Total Score</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+
+            if (playerScores.length === 0) {
+                tableHtml += `<tr><td colspan="3" class="text-center py-4">No scores to display.</td></tr>`;
+            } else {
+                playerScores.forEach((player, index) => {
+                    tableHtml += `<tr>
+                        <td class="py-2 px-4">${index + 1}</td>
+                        <td class="py-2 px-4">${player.name}</td>
+                        <td class="py-2 px-4">${player.totalScore}</td>
+                    </tr>`;
+                });
+            }
+
+            tableHtml += `</tbody></table>`;
+            scoreboardTableContainer.innerHTML = tableHtml;
+        }
+
+        // --- Form Submission Logic ---
+        picksForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const confidenceInputs = document.querySelectorAll('#picksForm .confidence-score');
+            const confidenceScores = Array.from(confidenceInputs).map(input => parseInt(input.value, 10));
+
+            const uniqueScores = new Set(confidenceScores);
+            if (uniqueScores.size !== 16 || confidenceScores.some(score => isNaN(score))) {
+                displayMessage(picksMessageContainer, "Error: Please ensure you have selected a unique confidence score for all 16 games.", "error");
+                return;
+            }
+
+            submitPicksBtn.disabled = true;
+            submitPicksBtn.textContent = 'Submitting...';
+            picksMessageContainer.classList.add('hidden');
+
+            try {
+                if (!userId) {
+                    throw new Error("User not authenticated. Please refresh the page.");
+                }
+
+                const formData = new FormData(picksForm);
+                const userName = formData.get('userName');
+                localStorage.setItem('nfl_pickem_user_name', userName);
+                const picks = { userName: userName };
+                for (let i = 1; i <= 16; i++) {
+                    const gameNumber = i;
+                    picks[`game${gameNumber}`] = {
+                        winner: formData.get(`winner-${gameNumber}`),
+                        confidenceScore: parseInt(formData.get(`confidence-${gameNumber}`), 10),
+                        combinedScore: parseInt(formData.get(`combined-${gameNumber}`), 10)
+                    };
+                }
+
+                const docRef = doc(db, 'artifacts', appId, 'users', userId, 'picks', 'week1');
+                await setDoc(docRef, picks);
+
+                displayMessage(picksMessageContainer, "Picks submitted successfully!", "success");
+                picksForm.reset();
+
+            } catch (error) {
+                console.error("Submission Error:", error);
+                displayMessage(picksMessageContainer, `Submission failed. Please check the console for details.`, "error");
+            } finally {
+                submitPicksBtn.disabled = false;
+                submitPicksBtn.textContent = 'Submit Picks';
+            }
+        });
+
+        resultsForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            submitResultsBtn.disabled = true;
+            submitResultsBtn.textContent = 'Submitting...';
+            resultsMessageContainer.classList.add('hidden');
+
+            try {
+                const officialResults = {};
+                GAMES.forEach((game, index) => {
+                    const winner = document.getElementById(`official-winner-${index}`).value;
+                    const combinedScore = parseInt(document.getElementById(`official-combined-${index}`).value, 10);
+                    officialResults[game.name] = {
+                        winner: winner,
+                        combinedScore: combinedScore
+                    };
+                });
+
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'official_results', 'week1');
+                await setDoc(docRef, officialResults);
+                
+                displayMessage(resultsMessageContainer, "Official results submitted successfully!", "success");
+            } catch (error) {
+                console.error("Results Submission Error:", error);
+                displayMessage(resultsMessageContainer, "Error submitting official results. Please check the console.", "error");
+            } finally {
+                submitResultsBtn.disabled = false;
+                submitResultsBtn.textContent = 'Submit Official Results';
+            }
+        });
+
+    </script>
+</body>
+</html>
