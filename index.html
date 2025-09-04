@@ -82,6 +82,7 @@
         <div class="text-center mb-6">
             <h1 class="text-4xl font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-red-600">NFL Pick 'Em | Week 1</h1>
             <p class="text-lg text-gray-400">Manage your league and view the scoreboard.</p>
+            <div id="userIdDisplay" class="text-sm mt-2 text-gray-500"></div>
         </div>
 
         <div class="flex justify-center gap-4 mb-8">
@@ -89,6 +90,8 @@
             <button id="showResultsBtn" class="hidden">Submit Results</button>
             <button id="showScoreboardBtn">View Scoreboard</button>
         </div>
+        
+        <div id="appErrorMessage" class="message-box error hidden"></div>
 
         <!-- Pick Submission Form -->
         <div id="picks-container" class="card">
@@ -137,8 +140,18 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDocs, collection, query, setLogLevel, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
+        // Firebase configuration from your project
+        const firebaseConfig = {
+          apiKey: "AIzaSyAqWqbhUkxm-CXsqG1h8kMhrvpadBmfvuQ",
+          authDomain: "nfl-pick--em-a779e.firebaseapp.com",
+          projectId: "nfl-pick--em-a779e",
+          storageBucket: "nfl-pick--em-a779e.firebasestorage.app",
+          messagingSenderId: "416036401514",
+          appId: "1:416036401514:web:2dd7ea9a4a15f4dbeb3513",
+          measurementId: "G-TW4K0TCGPD"
+        };
+        
         // Use provided global variables
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         
@@ -177,6 +190,9 @@
         const resultsMessageContainer = document.getElementById('resultsMessageContainer');
 
         const scoreboardTableContainer = document.getElementById('scoreboard-table-container');
+        const userIdDisplay = document.getElementById('userIdDisplay');
+        const appErrorMessage = document.getElementById('appErrorMessage');
+
 
         // Update GAMES to include team names for dropdown
         const GAMES = [
@@ -203,6 +219,7 @@
             picksContainer.classList.add('hidden');
             resultsContainer.classList.add('hidden');
             scoreboardContainer.classList.add('hidden');
+            appErrorMessage.classList.add('hidden');
 
             if (view === 'picks') {
                 picksContainer.classList.remove('hidden');
@@ -327,6 +344,7 @@
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 userId = user.uid;
+                userIdDisplay.textContent = `Your User ID: ${userId}`;
                 // Show the admin button if the user is the admin
                 if (userId === ADMIN_USER_ID) {
                     showResultsBtn.classList.remove('hidden');
@@ -343,6 +361,7 @@
                 } catch (error) {
                     console.error("Firebase Auth Error:", error);
                     userId = crypto.randomUUID();
+                    userIdDisplay.textContent = `Your User ID: ${userId}`;
                 }
             }
             isAuthReady = true;
@@ -372,11 +391,15 @@
             onSnapshot(officialResultsRef, (docSnap) => {
                 if (docSnap.exists()) {
                     officialResults = docSnap.data();
-                    console.log("Official results updated:", officialResults);
                 } else {
                     officialResults = {};
                 }
                 updateScoreboard(playersData, officialResults);
+            }, (error) => {
+                console.error("Error fetching official results:", error);
+                if (error.code === 'permission-denied') {
+                    displayMessage(appErrorMessage, "Database Error: Missing or insufficient permissions. Please check your Firestore Security Rules.", "error");
+                }
             });
 
             // Listen for changes to all player picks for the scoreboard
@@ -386,12 +409,22 @@
                     playersData[doc.id] = doc.data();
                 });
                 updateScoreboard(playersData, officialResults);
+            }, (error) => {
+                console.error("Error fetching player picks:", error);
+                if (error.code === 'permission-denied') {
+                    displayMessage(appErrorMessage, "Database Error: Missing or insufficient permissions. Please check your Firestore Security Rules.", "error");
+                }
             });
 
             // Listen for changes to the current user's picks
             onSnapshot(currentUserPicksRef, (docSnap) => {
                 if (docSnap.exists()) {
                     prefillPicksForm(docSnap.data());
+                }
+            }, (error) => {
+                console.error("Error fetching user's picks:", error);
+                if (error.code === 'permission-denied') {
+                    displayMessage(appErrorMessage, "Database Error: Missing or insufficient permissions for your user data. Please check your Firestore Security Rules.", "error");
                 }
             });
         }
@@ -505,8 +538,7 @@
                 await setDoc(publicDocRef, picks);
 
                 displayMessage(picksMessageContainer, "Picks submitted successfully!", "success");
-                picksForm.reset();
-
+                
             } catch (error) {
                 console.error("Submission Error:", error);
                 displayMessage(picksMessageContainer, `Submission failed. Please check the console for details.`, "error");
