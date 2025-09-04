@@ -1,334 +1,41 @@
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-  import {
-    getAuth, signInAnonymously, onAuthStateChanged
-  } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-  import {
-    getFirestore, doc, setDoc, getDoc, getDocs,
-    collection, query, onSnapshot, setLogLevel
-  } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NFL Pick 'Em - Week 1</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <h1>NFL Pick 'Em - Week 1</h1>
 
-  // ---------- CONFIG ----------
-  // OPTION A (easiest while testing): hardcode your config here.
-  const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID",
-    appId: "YOUR_APP_ID"
-  };
+  <!-- USER PICK FORM -->
+  <section id="pickFormSection">
+    <h2>Your Picks</h2>
+    <div id="userIdDisplay"></div>
+    <form id="picksForm">
+      <div id="gamesContainer"></div>
+      <button type="submit">Submit Picks</button>
+    </form>
+    <p class="readonly">Once submitted, your picks are locked.</p>
+  </section>
 
-  // OPTION B (if you inject globals elsewhere)
-  // const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+  <!-- PUBLIC SCOREBOARD -->
+  <section class="scoreboard">
+    <h2>Scoreboard</h2>
+    <div id="scoreboard"></div>
+  </section>
 
-  const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+  <!-- ADMIN PANEL -->
+  <section class="admin-panel" id="adminPanel">
+    <h2>Admin Panel</h2>
+    <p class="readonly">For commissioner use only – enter official results after games finish.</p>
+    <form id="resultsForm">
+      <div id="resultsContainer"></div>
+      <button type="submit">Submit Results</button>
+    </form>
+  </section>
 
-  // ---------- DEBUG ----------
-  setLogLevel('debug');
-
-  // ---------- INIT ----------
-  let app, db, auth, userId = null;
-  try {
-    app = initializeApp(firebaseConfig);
-    db  = getFirestore(app);
-    auth = getAuth(app);
-  } catch (e) {
-    console.error("Firebase Initialization Error:", e);
-    showAppError("Failed to initialize Firebase. Check your configuration.");
-  }
-
-  // ---------- DOM ----------
-  const showPicksBtn = document.getElementById('showPicksBtn');
-  const showScoreboardBtn = document.getElementById('showScoreboardBtn');
-  const picksContainer = document.getElementById('picks-container');
-  const scoreboardContainer = document.getElementById('scoreboard-container');
-  const userNameInput = document.getElementById('userName');
-  const gamesContainer = document.getElementById('games-container');
-  const picksForm = document.getElementById('picksForm');
-  const submitPicksBtn = document.getElementById('submitPicksBtn');
-  const picksMessageContainer = document.getElementById('picksMessageContainer');
-  const scoreboardTableContainer = document.getElementById('scoreboard-table-container');
-  const userIdDisplay = document.getElementById('userIdDisplay');
-  const appErrorMessage = document.getElementById('appErrorMessage');
-
-  function showAppError(msg) {
-    appErrorMessage.textContent = msg;
-    appErrorMessage.className = "message-box error";
-    appErrorMessage.classList.remove('hidden');
-  }
-
-  // ---------- DATA ----------
-  const GAMES = [
-    { name: "Cowboys vs Eagles", teams: ["Cowboys", "Eagles"] },
-    { name: "Chiefs vs Chargers", teams: ["Chiefs", "Chargers"] },
-    { name: "Falcons vs Buccaneers", teams: ["Falcons", "Buccaneers"] },
-    { name: "Bengals vs Browns", teams: ["Bengals", "Browns"] },
-    { name: "Colts vs Dolphins", teams: ["Colts", "Dolphins"] },
-    { name: "Raiders vs Patriots", teams: ["Raiders", "Patriots"] },
-    { name: "Saints vs Cardinals", teams: ["Saints", "Cardinals"] },
-    { name: "Jets vs Steelers", teams: ["Jets", "Steelers"] },
-    { name: "Commanders vs Giants", teams: ["Commanders", "Giants"] },
-    { name: "Jaguars vs Panthers", teams: ["Jaguars", "Panthers"] },
-    { name: "Broncos vs Titans", teams: ["Broncos", "Titans"] },
-    { name: "Seahawks vs 49ers", teams: ["Seahawks", "49ers"] },
-    { name: "Packers vs Lions", teams: ["Packers", "Lions"] },
-    { name: "Rams vs Texans", teams: ["Rams", "Texans"] },
-    { name: "Bills vs Ravens", teams: ["Bills", "Ravens"] },
-    { name: "Vikings vs Bears", teams: ["Vikings", "Bears"] }
-  ];
-
-  let officialResults = {};
-
-  // ---------- VIEW SWITCH ----------
-  function switchView(view) {
-    picksContainer.classList.add('hidden');
-    scoreboardContainer.classList.add('hidden');
-    if (view === 'picks') picksContainer.classList.remove('hidden');
-    if (view === 'scoreboard') scoreboardContainer.classList.remove('hidden');
-  }
-  showPicksBtn.addEventListener('click', () => switchView('picks'));
-  showScoreboardBtn.addEventListener('click', () => switchView('scoreboard'));
-
-  // ---------- FORM GEN ----------
-  function generateFormFields() {
-    gamesContainer.innerHTML = '';
-    GAMES.forEach((game, index) => {
-      const i = index + 1;
-      const div = document.createElement('div');
-      div.className = 'card';
-      div.innerHTML = `
-        <h3 class="text-xl font-bold mb-4">${game.name}</h3>
-        <div class="mb-4">
-          <label class="block text-gray-300 text-sm font-medium mb-1">Winning Team</label>
-          <select id="winner-${i}" name="winner-${i}" required>
-            <option value="">Select Winner</option>
-            <option value="${game.teams[0]}">${game.teams[0]}</option>
-            <option value="${game.teams[1]}">${game.teams[1]}</option>
-          </select>
-        </div>
-        <div class="mb-4">
-          <label class="block text-gray-300 text-sm font-medium mb-1">Confidence Score (1-16)</label>
-          <select id="confidence-${i}" name="confidence-${i}" class="confidence-score" required>
-            <option value="">Select Score</option>
-          </select>
-        </div>
-        <div>
-          <label class="block text-gray-300 text-sm font-medium mb-1">Combined Score</label>
-          <input type="number" id="combined-${i}" name="combined-${i}" min="0" required />
-        </div>
-      `;
-      gamesContainer.appendChild(div);
-    });
-
-    const allConfidence = document.querySelectorAll('.confidence-score');
-    allConfidence.forEach(s => {
-      for (let n = 1; n <= 16; n++) {
-        const opt = document.createElement('option');
-        opt.value = n; opt.textContent = n;
-        s.appendChild(opt);
-      }
-    });
-
-    // uniqueness enforcement for confidence scores
-    picksForm.addEventListener('change', () => {
-      const selected = Array.from(allConfidence).map(s => s.value).filter(v => v !== "");
-      allConfidence.forEach(select => {
-        Array.from(select.options).forEach(opt => {
-          opt.disabled = false;
-          if (opt.value !== select.value && selected.includes(opt.value)) {
-            opt.disabled = true;
-          }
-        });
-      });
-    });
-  }
-
-  function prefillPicksForm(picks) {
-    if (!picks) return;
-    if (picks.userName) userNameInput.value = picks.userName;
-    for (let i = 1; i <= 16; i++) {
-      const g = picks[`game${i}`];
-      if (!g) continue;
-      const w = document.getElementById(`winner-${i}`);
-      const c = document.getElementById(`confidence-${i}`);
-      const s = document.getElementById(`combined-${i}`);
-      if (w) w.value = g.winner ?? "";
-      if (c) c.value = g.confidenceScore ?? "";
-      if (s) s.value = g.combinedScore ?? "";
-    }
-  }
-
-  function lockForm(reasonText = "Your picks were submitted and are locked.") {
-    picksForm.querySelectorAll('input, select, button').forEach(el => {
-      if (el.id !== 'showScoreboardBtn' && el.type !== 'button') el.disabled = true;
-    });
-    submitPicksBtn.textContent = 'SUBMITTED';
-    submitPicksBtn.disabled = true;
-    displayMessage(picksMessageContainer, reasonText, "success");
-  }
-
-  function displayMessage(container, message, type) {
-    container.textContent = message;
-    container.className = `message-box ${type}`;
-    container.classList.remove('hidden');
-  }
-
-  // ---------- SCORE + BOARD ----------
-  function calculateScore(picks, official) {
-    if (!official) return { totalScore: 0 };
-    let total = 0;
-    for (let i = 1; i <= 16; i++) {
-      const gameKey = GAMES[i - 1].name;
-      const p = picks[`game${i}`];
-      const o = official[gameKey];
-      if (p && o) {
-        if (p.winner && o.winner && p.winner.trim().toLowerCase() === o.winner.toLowerCase()) {
-          total += Number(p.confidenceScore) || 0;
-        }
-        const diff = Math.abs((Number(p.combinedScore) || 0) - (Number(o.combinedScore) || 0));
-        if (diff <= 9) total += (10 - diff);
-      }
-    }
-    return { totalScore: total };
-  }
-
-  function updateScoreboard(playersData, official) {
-    const list = [];
-    for (const playerId in playersData) {
-      const picks = playersData[playerId];
-      const { totalScore } = calculateScore(picks, official);
-      list.push({ name: picks.userName || "(anonymous)", totalScore });
-    }
-    list.sort((a, b) => b.totalScore - a.totalScore);
-
-    let html = `<table class="min-w-full scoreboard-table rounded-lg overflow-hidden">
-      <thead><tr>
-        <th class="py-3 px-4">Rank</th>
-        <th class="py-3 px-4">Player</th>
-        <th class="py-3 px-4">Total Score</th>
-      </tr></thead><tbody>`;
-
-    if (!list.length) {
-      html += `<tr><td colspan="3" class="text-center py-4">No scores to display.</td></tr>`;
-    } else {
-      list.forEach((p, i) => {
-        html += `<tr>
-          <td class="py-2 px-4">${i + 1}</td>
-          <td class="py-2 px-4">${p.name}</td>
-          <td class="py-2 px-4">${p.totalScore}</td>
-        </tr>`;
-      });
-    }
-    html += `</tbody></table>`;
-    scoreboardTableContainer.innerHTML = html;
-  }
-
-  function setupListeners() {
-    // Official results (public, admin-written)
-    const officialRef = doc(db, 'artifacts', appId, 'public', 'data', 'official_results', 'week1');
-    onSnapshot(officialRef, snap => {
-      officialResults = snap.exists() ? snap.data() : {};
-    }, err => {
-      console.error("Official results listener error:", err);
-    });
-
-    // Public all_picks (read-only for everyone)
-    const allPicksRef = collection(db, 'artifacts', appId, 'public', 'data', 'all_picks');
-    onSnapshot(allPicksRef, qs => {
-      const players = {};
-      qs.forEach(d => players[d.id] = d.data());
-      updateScoreboard(players, officialResults);
-    }, err => {
-      console.error("Public picks listener error:", err);
-    });
-  }
-
-  // ---------- SUBMIT ----------
-  picksForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-
-    const confidenceInputs = document.querySelectorAll('#picksForm .confidence-score');
-    const scores = Array.from(confidenceInputs).map(i => parseInt(i.value, 10));
-    const uniq = new Set(scores);
-    if (uniq.size !== 16 || scores.some(s => isNaN(s))) {
-      displayMessage(picksMessageContainer, "Error: Select a unique confidence score for all 16 games.", "error");
-      return;
-    }
-
-    try {
-      if (!userId) throw new Error("Not authenticated yet.");
-      submitPicksBtn.disabled = true; submitPicksBtn.textContent = 'Submitting...';
-      picksMessageContainer.classList.add('hidden');
-
-      // Check if private doc already exists (submit-once UX, rules also enforce)
-      const privateRef = doc(db, 'artifacts', appId, 'users', userId, 'picks', 'week1');
-      const exists = await getDoc(privateRef);
-      if (exists.exists()) {
-        lockForm("You already submitted. Picks are locked.");
-        return;
-      }
-
-      const formData = new FormData(picksForm);
-      const userName = userNameInput.value?.trim() || "Player";
-      const payload = { userName };
-      for (let i = 1; i <= 16; i++) {
-        payload[`game${i}`] = {
-          winner: formData.get(`winner-${i}`),
-          confidenceScore: parseInt(formData.get(`confidence-${i}`), 10),
-          combinedScore: parseInt(formData.get(`combined-${i}`), 10)
-        };
-      }
-
-      // Write private (owner only, create-once)
-      await setDoc(privateRef, payload, { merge: false });
-
-      // Public mirror (read-only + create-once)
-      const publicRef = doc(db, 'artifacts', appId, 'public', 'data', 'all_picks', userId);
-      await setDoc(publicRef, payload, { merge: false });
-
-      displayMessage(picksMessageContainer, "Picks submitted successfully! They are now locked.", "success");
-      lockForm();
-
-    } catch (err) {
-      console.error("Submission Error:", err);
-      let msg = "Submission failed. See console for details.";
-      if (err?.code === 'permission-denied') {
-        msg = "Permission denied by security rules.";
-      }
-      displayMessage(picksMessageContainer, msg, "error");
-      submitPicksBtn.disabled = false; submitPicksBtn.textContent = 'SUBMIT PICKS';
-    }
-  });
-
-  // ---------- AUTH + BOOT ----------
-  async function initApp() {
-    try {
-      await signInAnonymously(auth);
-    } catch (e) {
-      console.error("Auth Error:", e);
-      showAppError("Authentication failed. The app may not function correctly.");
-    }
-  }
-
-  onAuthStateChanged(auth, async (user) => {
-    if (!user) return;
-    userId = user.uid;
-    userIdDisplay.textContent = `Your User ID: ${userId}`;
-
-    generateFormFields();
-    setupListeners();
-
-    // If already submitted, prefill + lock immediately
-    try {
-      const privateRef = doc(db, 'artifacts', appId, 'users', userId, 'picks', 'week1');
-      const snap = await getDoc(privateRef);
-      if (snap.exists()) {
-        prefillPicksForm(snap.data());
-        lockForm("You already submitted. Picks are locked.");
-      }
-    } catch (e) {
-      console.error("Prefill error:", e);
-    }
-  });
-
-  window.onload = initApp;
-</script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
