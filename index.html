@@ -300,7 +300,28 @@
                 });
             });
         }
-        generateFormFields();
+        
+        function prefillPicksForm(picks) {
+            if (!picks) return;
+
+            if (picks.userName) {
+                userNameInput.value = picks.userName;
+            }
+
+            for (let i = 1; i <= 16; i++) {
+                const gamePicks = picks[`game${i}`];
+                if (gamePicks) {
+                    const winnerSelect = document.getElementById(`winner-${i}`);
+                    if (winnerSelect) winnerSelect.value = gamePicks.winner;
+
+                    const confidenceSelect = document.getElementById(`confidence-${i}`);
+                    if (confidenceSelect) confidenceSelect.value = gamePicks.confidenceScore;
+
+                    const combinedInput = document.getElementById(`combined-${i}`);
+                    if (combinedInput) combinedInput.value = gamePicks.combinedScore;
+                }
+            }
+        }
 
         // Handle user authentication
         onAuthStateChanged(auth, async (user) => {
@@ -311,9 +332,6 @@
                     showResultsBtn.classList.remove('hidden');
                 } else {
                     showResultsBtn.classList.add('hidden');
-                }
-                if (userNameInput) {
-                     userNameInput.value = localStorage.getItem('nfl_pickem_user_name') || '';
                 }
             } else {
                 try {
@@ -329,7 +347,8 @@
             }
             isAuthReady = true;
             if (isAuthReady) {
-                // Attach listeners after auth is ready
+                // Attach listeners and generate form fields after auth is ready
+                generateFormFields();
                 setupListeners();
             }
         });
@@ -344,10 +363,12 @@
         function setupListeners() {
             const officialResultsRef = doc(db, 'artifacts', appId, 'public', 'data', 'official_results', 'week1');
             const playersRef = collection(db, 'artifacts', appId, 'users');
+            const currentUserPicksRef = doc(db, 'artifacts', appId, 'users', userId, 'picks', 'week1');
 
             let officialResults = {};
             let playersData = {};
 
+            // Listen for changes to the official results
             onSnapshot(officialResultsRef, (docSnap) => {
                 if (docSnap.exists()) {
                     officialResults = docSnap.data();
@@ -358,6 +379,7 @@
                 updateScoreboard(playersData, officialResults);
             });
 
+            // Listen for changes to all player picks
             onSnapshot(playersRef, (querySnapshot) => {
                 playersData = {};
                 querySnapshot.forEach((doc) => {
@@ -372,6 +394,13 @@
                         updateScoreboard(playersData, officialResults);
                     });
                 });
+            });
+
+            // Listen for changes to the current user's picks
+            onSnapshot(currentUserPicksRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    prefillPicksForm(docSnap.data());
+                }
             });
         }
 
@@ -466,7 +495,6 @@
 
                 const formData = new FormData(picksForm);
                 const userName = formData.get('userName');
-                localStorage.setItem('nfl_pickem_user_name', userName);
                 const picks = { userName: userName };
                 for (let i = 1; i <= 16; i++) {
                     const gameNumber = i;
