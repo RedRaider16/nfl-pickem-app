@@ -1,41 +1,252 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>NFL Pick 'Em - Week 1</title>
-  <link rel="stylesheet" href="css/styles.css" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NFL Pick 'Em | Week 1</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; background-color: #1a1a2e; color: #fff; line-height: 1.6; }
+    .container { max-width: 900px; margin: auto; padding: 1.5rem; }
+    .card { background-color: #2e2e4a; border-radius: 0.75rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 1.5rem; margin-bottom: 1.5rem; }
+    input[type="text"], input[type="number"], select { background-color: #3e3e5c; border: 1px solid #5c5c7d; border-radius: 0.5rem; color: #fff; padding: 0.5rem 0.75rem; width: 100%; }
+    button { background-color: #ff5722; color: white; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: 600; transition: background-color 0.3s ease; }
+    button:hover { background-color: #e64a19; }
+    .message-box { padding: 0.75rem; border-radius: 0.5rem; margin-top: 1rem; font-weight: 600; }
+    .message-box.success { background-color: #4caf50; }
+    .message-box.error { background-color: #f44336; }
+    .scoreboard-table th, .scoreboard-table td { padding: 0.75rem; text-align: left; }
+    .scoreboard-table thead { background-color: #1a1a2e; }
+    .scoreboard-table tbody tr:nth-child(even) { background-color: #3e3e5c; }
+</style>
 </head>
-<body>
-  <h1>NFL Pick 'Em - Week 1</h1>
+<body class="bg-gray-900 text-gray-100 min-h-screen flex items-center justify-center">
+<div class="container">
+    <div class="text-center mb-6">
+        <h1 class="text-4xl font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-red-600">NFL Pick 'Em | Week 1</h1>
+        <p class="text-lg text-gray-400">Manage your league and view the scoreboard.</p>
+        <div id="userIdDisplay" class="text-sm mt-2 text-gray-500"></div>
+    </div>
 
-  <!-- USER PICK FORM -->
-  <section id="pickFormSection">
-    <h2>Your Picks</h2>
-    <div id="userIdDisplay"></div>
-    <form id="picksForm">
-      <div id="gamesContainer"></div>
-      <button type="submit">Submit Picks</button>
-    </form>
-    <p class="readonly">Once submitted, your picks are locked.</p>
-  </section>
+    <div class="flex justify-center gap-4 mb-8">
+        <button id="showPicksBtn">Submit Picks</button>
+        <button id="showScoreboardBtn">View Scoreboard</button>
+    </div>
 
-  <!-- PUBLIC SCOREBOARD -->
-  <section class="scoreboard">
-    <h2>Scoreboard</h2>
-    <div id="scoreboard"></div>
-  </section>
+    <div id="appErrorMessage" class="message-box error hidden"></div>
 
-  <!-- ADMIN PANEL -->
-  <section class="admin-panel" id="adminPanel">
-    <h2>Admin Panel</h2>
-    <p class="readonly">For commissioner use only – enter official results after games finish.</p>
-    <form id="resultsForm">
-      <div id="resultsContainer"></div>
-      <button type="submit">Submit Results</button>
-    </form>
-  </section>
+    <!-- Picks Form -->
+    <div id="picksContainer" class="card">
+        <form id="picksForm">
+            <div id="gamesContainer" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+            <div class="flex justify-center mt-8">
+                <button type="submit" id="submitPicksBtn" class="w-full md:w-auto text-lg uppercase font-bold">SUBMIT PICKS</button>
+            </div>
+        </form>
+        <div id="picksMessageContainer" class="message-box hidden"></div>
+    </div>
 
-  <script type="module" src="js/app.js"></script>
+    <!-- Scoreboard -->
+    <div id="scoreboardContainer" class="card hidden">
+        <h2 class="text-2xl font-bold mb-4">Current Scoreboard</h2>
+        <div id="scoreboard" class="overflow-x-auto"></div>
+    </div>
+
+    <!-- Admin Panel -->
+    <div id="adminPanel" class="card hidden">
+        <h2 class="text-2xl font-bold mb-4">Admin: Submit Official Results</h2>
+        <form id="resultsForm">
+            <div id="resultsContainer"></div>
+            <div class="flex justify-center mt-4">
+                <button type="submit" class="w-full md:w-auto text-lg uppercase font-bold">SUBMIT RESULTS</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Firebase SDK -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, doc, setDoc, collection, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// 🔹 Firebase Config
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = "nfl-pickem-week1";
+let userId = null;
+
+// 🔹 Games
+const games = [
+  "Cowboys vs Eagles", "Chiefs vs Chargers", "Falcons vs Buccaneers",
+  "Bengals vs Browns", "Colts vs Dolphins", "Raiders vs Patriots",
+  "Saints vs Cardinals", "Jets vs Steelers", "Commanders vs Giants",
+  "Jaguars vs Panthers", "Broncos vs Titans", "Packers vs Vikings",
+  "Rams vs Seahawks", "49ers vs Bears", "Lions vs Bills",
+  "Texans vs Ravens"
+];
+
+// 🔹 View switching
+const picksContainer = document.getElementById("picksContainer");
+const scoreboardContainer = document.getElementById("scoreboardContainer");
+const showPicksBtn = document.getElementById("showPicksBtn");
+const showScoreboardBtn = document.getElementById("showScoreboardBtn");
+showPicksBtn.addEventListener('click', () => { picksContainer.classList.remove('hidden'); scoreboardContainer.classList.add('hidden'); });
+showScoreboardBtn.addEventListener('click', () => { scoreboardContainer.classList.remove('hidden'); picksContainer.classList.add('hidden'); });
+
+// 🔹 Generate Picks Form
+function generateFormFields() {
+  const container = document.getElementById("gamesContainer");
+  container.innerHTML = "";
+  games.forEach((game, idx) => {
+    container.innerHTML += `
+      <div class="game card p-4">
+        <label><strong>${game}</strong></label><br/>
+        Winner: <input type="text" name="winner${idx}" required/><br/>
+        Confidence (1-16): <input type="number" name="conf${idx}" min="1" max="16" required/><br/>
+        Predicted Total: <input type="number" name="pred${idx}" required/>
+      </div>`;
+  });
+}
+
+// 🔹 Firebase Auth
+onAuthStateChanged(auth, async (user) => {
+  if (user) {
+    userId = user.uid;
+    document.getElementById('userIdDisplay').textContent = `Your User ID: ${userId}`;
+
+    // Only initialize UI once authenticated
+    generateFormFields();
+    setupListeners();
+    hideAdminPanel();
+  } else {
+    console.log("User not authenticated.");
+  }
+});
+
+// 🔹 Picks Submission
+document.getElementById("picksForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!userId) return;
+
+  // Lock if picks exist
+  const privateRef = doc(db, `artifacts/${appId}/users/${userId}`);
+  const snap = await getDoc(privateRef);
+  if (snap.exists()) { alert("You have already submitted your picks. They are now locked."); return; }
+
+  const data = {};
+  games.forEach((_, idx) => {
+    data[`game${idx}`] = {
+      winner: e.target[`winner${idx}`].value,
+      confidence: parseInt(e.target[`conf${idx}`].value),
+      predicted: parseInt(e.target[`pred${idx}`].value)
+    };
+  });
+
+  await setDoc(privateRef, data);
+  await setDoc(doc(db, `artifacts/${appId}/public/data/${userId}`), { name: userId, picks: data });
+  alert("Picks submitted! They are now locked.");
+  e.target.reset();
+});
+
+// 🔹 Score Calculation
+function calculateScore(userPicks, officialResults) {
+  let total = 0;
+  if (!officialResults) return total;
+  Object.keys(userPicks).forEach((gameKey) => {
+    const pick = userPicks[gameKey];
+    const result = officialResults[gameKey];
+    if (!result) return;
+
+    if (pick.winner && result.winner && pick.winner.toLowerCase() === result.winner.toLowerCase()) {
+      total += pick.confidence;
+    }
+    if (pick.predicted && result.totalScore) {
+      let diff = Math.abs(pick.predicted - result.totalScore);
+      total += Math.max(0, 10 - diff);
+    }
+  });
+  return total;
+}
+
+// 🔹 Load Scoreboard
+async function loadScoreboard() {
+  const resultsSnap = await getDoc(doc(db, `artifacts/${appId}/public/results/week1`));
+  const officialResults = resultsSnap.exists() ? resultsSnap.data() : null;
+  const publicRef = collection(db, `artifacts/${appId}/public/data`);
+  onSnapshot(publicRef, (snapshot) => {
+    const div = document.getElementById("scoreboard");
+    div.innerHTML = "";
+    let players = [];
+    snapshot.forEach(docSnap => {
+      const d = docSnap.data();
+      let score = calculateScore(d.picks, officialResults);
+      players.push({ name: d.name, score });
+    });
+    players.sort((a, b) => b.score - a.score);
+    let html = "<table class='scoreboard-table w-full'><thead><tr><th>Rank</th><th>Player</th><th>Score</th></tr></thead><tbody>";
+    players.forEach((p, idx) => html += `<tr><td>${idx+1}</td><td>${p.name}</td><td>${p.score}</td></tr>`);
+    html += "</tbody></table>";
+    div.innerHTML = html;
+  });
+}
+loadScoreboard();
+
+// 🔹 Admin Panel
+function generateResultsFields() {
+  const container = document.getElementById("resultsContainer");
+  container.innerHTML = "";
+  games.forEach((game, idx) => {
+    container.innerHTML += `
+      <div class="game card p-4">
+        <label><strong>${game} Result</strong></label><br/>
+        Winner: <input type="text" name="resultWinner${idx}" /><br/>
+        Total Score: <input type="number" name="resultScore${idx}" />
+      </div>`;
+  });
+}
+document.getElementById("resultsForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const results = {};
+  games.forEach((_, idx) => {
+    results[`game${idx}`] = {
+      winner: e.target[`resultWinner${idx}`].value,
+      totalScore: parseInt(e.target[`resultScore${idx}`].value)
+    };
+  });
+  await setDoc(doc(db, `artifacts/${appId}/public/results/week1`), results);
+  alert("Official results submitted!");
+});
+
+// 🔹 Admin Password Prompt
+function hideAdminPanel() {
+  const password = prompt("Enter admin password (leave blank for players):");
+  if (password !== "YOUR_SECRET_PASSWORD") {
+    document.getElementById("adminPanel").style.display = "none";
+  } else {
+    document.getElementById("adminPanel").style.display = "block";
+    generateResultsFields();
+  }
+}
+
+// 🔹 Setup Listeners
+function setupListeners() {
+  // You can add more event listeners here if needed
+}
+
+// 🔹 Sign in anonymously on load
+signInAnonymously(auth).catch(console.error);
+</script>
 </body>
 </html>
