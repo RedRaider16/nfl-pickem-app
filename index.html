@@ -140,8 +140,16 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDocs, collection, query, setLogLevel, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
-        // Use the firebase config provided by the environment
-        const firebaseConfig = JSON.parse(__firebase_config);
+        // Firebase configuration from your project
+        const firebaseConfig = {
+          apiKey: "AIzaSyAqWqbhUkxm-CXsqG1h8kMhrvpadBmfvuQ",
+          authDomain: "nfl-pick--em-a779e.firebaseapp.com",
+          projectId: "nfl-pick--em-a779e",
+          storageBucket: "nfl-pick--em-a779e.firebasestorage.app",
+          messagingSenderId: "416036401514",
+          appId: "1:416036401514:web:2dd7ea9a4a15f4dbeb3513",
+          measurementId: "G-TW4K0TCGPD"
+        };
         
         // Use provided global variables
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
@@ -149,7 +157,7 @@
         
         // This is a simplified admin check for demonstration purposes.
         // In a real application, you would use a more robust role management system.
-        const ADMIN_USER_ID = "10d67255-b982-4ed1-9c2e-d140a6395628";
+        const ADMIN_USER_ID = "replace-with-your-admin-user-id";
 
         // Set Firebase log level for debugging
         setLogLevel('debug');
