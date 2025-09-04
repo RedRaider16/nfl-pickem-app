@@ -66,15 +66,13 @@
         .scoreboard-table tbody tr:nth-child(even) {
             background-color: #3e3e5c;
         }
-        /* Specific styles for the Submit Picks button */
         #submitPicksBtn {
-            background-color: #dc2626; /* A solid red */
-            padding: 1rem 2rem; /* Increased padding for a larger size */
+            background-color: #dc2626;
+            padding: 1rem 2rem;
         }
         #submitPicksBtn:hover {
-            background-color: #b91c1c; /* A darker red for hover */
+            background-color: #b91c1c;
         }
-        /* Style for the select element options */
         select option:disabled {
             background-color: #2e2e4a;
             color: #71717a;
@@ -163,7 +161,8 @@
         const auth = getAuth(app);
 
         let userId = null;
-        
+        let isAdmin = false;
+
         const showPicksBtn = document.getElementById('showPicksBtn');
         const showScoreboardBtn = document.getElementById('showScoreboardBtn');
         const picksContainer = document.getElementById('picks-container');
@@ -205,8 +204,6 @@
         ];
         let officialResults = {};
         
-        const adminPassword = "password"; // NOTE: In a real app, this should not be hardcoded.
-
         // Handle view switching
         function switchView(view) {
             picksContainer.classList.add('hidden');
@@ -225,25 +222,19 @@
         showPicksBtn.addEventListener('click', () => switchView('picks'));
         showScoreboardBtn.addEventListener('click', () => switchView('scoreboard'));
 
-        // Admin functionality
         function setupAdminPanel() {
-            const passwordPrompt = prompt("Enter admin password:");
-            if (passwordPrompt === adminPassword) {
-                document.body.innerHTML = document.body.innerHTML.replace("SUBMIT PICKS", "SUBMIT RESULTS");
-                showPicksBtn.textContent = "Admin Panel";
-                showPicksBtn.addEventListener('click', () => {
-                    switchView('admin');
-                });
+            if (isAdmin) {
+                adminContainer.classList.remove('hidden');
+                showPicksBtn.textContent = 'Admin Panel';
+                showPicksBtn.removeEventListener('click', () => switchView('picks'));
+                showPicksBtn.addEventListener('click', () => switchView('admin'));
                 generateResultsFields();
-                console.log("Admin mode activated.");
             } else {
-                console.log("Incorrect password. Admin panel is hidden.");
-                adminContainer.remove();
+                adminContainer.style.display = 'none';
             }
         }
 
         // --- Core App Logic ---
-        
         function generateFormFields() {
             gamesContainer.innerHTML = '';
             GAMES.forEach((game, index) => {
@@ -323,7 +314,7 @@
         // --- Firebase Listener Setup and Scoreboard Logic ---
         function setupListeners() {
             // Listen for changes to the official results
-            const officialResultsRef = doc(db, 'artifacts', appId, 'public', 'data', 'official_results', 'week1');
+            const officialResultsRef = doc(db, 'artifacts', appId, 'public', 'results', 'week1');
             onSnapshot(officialResultsRef, (docSnap) => {
                 if (docSnap.exists()) {
                     officialResults = docSnap.data();
@@ -338,7 +329,7 @@
             });
 
             // Listen for changes to all player picks for the scoreboard
-            const allPicksRef = collection(db, 'artifacts', appId, 'public', 'data', 'all_picks');
+            const allPicksRef = collection(db, 'artifacts', appId, 'public', 'data');
             onSnapshot(allPicksRef, (querySnapshot) => {
                 const playersData = {};
                 querySnapshot.forEach((doc) => {
@@ -354,7 +345,7 @@
 
             // Listen for changes to the current user's picks
             if (userId) {
-                const currentUserPicksRef = doc(db, 'artifacts', appId, 'users', userId, 'picks', 'week1');
+                const currentUserPicksRef = doc(db, 'artifacts', appId, 'users', userId);
                 onSnapshot(currentUserPicksRef, (docSnap) => {
                     if (docSnap.exists()) {
                         prefillPicksForm(docSnap.data());
@@ -456,9 +447,9 @@
                         combinedScore: parseInt(formData.get(`combined-${gameNumber}`), 10)
                     };
                 }
-                const privateDocRef = doc(db, 'artifacts', appId, 'users', userId, 'picks', 'week1');
+                const privateDocRef = doc(db, 'artifacts', appId, 'users', userId);
                 await setDoc(privateDocRef, picks);
-                const publicDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'all_picks', userId);
+                const publicDocRef = doc(db, 'artifacts', appId, 'public', 'data', userId);
                 await setDoc(publicDocRef, picks);
                 displayMessage(picksMessageContainer, "Picks submitted successfully!", "success");
             } catch (error) {
@@ -495,8 +486,8 @@
             submitResultsBtn.textContent = 'Submitting...';
             resultsMessageContainer.classList.add('hidden');
             try {
-                if (!userId) {
-                    throw new Error("User not authenticated.");
+                if (!userId || !isAdmin) {
+                    throw new Error("You must be an authenticated admin to submit results.");
                 }
                 const results = {};
                 GAMES.forEach((game, idx) => {
@@ -505,7 +496,7 @@
                         combinedScore: parseInt(e.target[`resultScore-${idx}`].value, 10)
                     };
                 });
-                const officialResultsRef = doc(db, 'artifacts', appId, 'public', 'data', 'official_results', 'week1');
+                const officialResultsRef = doc(db, 'artifacts', appId, 'public', 'results', 'week1');
                 await setDoc(officialResultsRef, results);
                 displayMessage(resultsMessageContainer, "Official results submitted!", "success");
             } catch (error) {
@@ -523,22 +514,15 @@
             userIdDisplay.textContent = `Your User ID: ${userId}`;
             generateFormFields();
             setupListeners();
-            if (window.location.hash === '#admin') {
-                generateResultsFields();
-                switchView('admin');
-            } else {
-                switchView('picks');
-            }
+            setupAdminPanel();
+            switchView('picks');
         }
         
         onAuthStateChanged(auth, async (user) => {
             if (user) {
+                const idTokenResult = await user.getIdTokenResult();
+                isAdmin = !!idTokenResult.claims.admin;
                 startApp(user);
-                const privateDocRef = doc(db, 'artifacts', appId, 'users', userId, 'picks', 'week1');
-                const docSnap = await getDoc(privateDocRef);
-                if (docSnap.exists()) {
-                    prefillPicksForm(docSnap.data());
-                }
             } else {
                 if (initialAuthToken) {
                     signInWithCustomToken(auth, initialAuthToken).catch(e => {
