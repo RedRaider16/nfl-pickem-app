@@ -32,17 +32,27 @@ const games = [
 // ==========================
 // 🔹 STEP 2: Authentication
 // ==========================
-signInAnonymously(auth).catch(console.error);
+onAuthStateChanged(auth, async (user) => {
+    if (user) {
+        userId = user.uid;
+        userIdDisplay.textContent = `Your User ID: ${userId}`;
 
-onAuthStateChanged(auth, (user) => {
-  if (user) {
-    userId = user.uid;
-    document.getElementById("userIdDisplay").textContent = `Your User ID: ${userId}`;
-    generateFormFields();
-    loadScoreboard();
-    generateResultsFields();
-    hideAdminPanel();
-  }
+        // Get the ID token with claims
+        const idTokenResult = await user.getIdTokenResult();
+        console.log("ID Token Claims:", idTokenResult.claims);
+
+        if (idTokenResult.claims.admin) {
+            console.log("✅ You are an admin!");
+        } else {
+            console.log("❌ You are NOT an admin.");
+        }
+
+        // Only initialize the UI and listeners once we have a user
+        generateFormFields();
+        setupListeners();
+    } else {
+        console.log("User signed out or failed to authenticate.");
+    }
 });
 
 // ==========================
