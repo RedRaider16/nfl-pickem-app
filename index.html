@@ -93,9 +93,11 @@
         <div class="flex justify-center gap-4 mb-8">
             <button id="showPicksBtn">Submit Picks</button>
             <button id="showScoreboardBtn">View Scoreboard</button>
+            <button id="shareAppBtn">Share App</button>
         </div>
         
         <div id="appErrorMessage" class="message-box error hidden"></div>
+        <div id="shareMessageContainer" class="message-box hidden"></div>
 
         <!-- Pick Submission Form -->
         <div id="picks-container" class="card">
@@ -155,6 +157,7 @@
         
         const showPicksBtn = document.getElementById('showPicksBtn');
         const showScoreboardBtn = document.getElementById('showScoreboardBtn');
+        const shareAppBtn = document.getElementById('shareAppBtn');
         
         const picksContainer = document.getElementById('picks-container');
         const scoreboardContainer = document.getElementById('scoreboard-container');
@@ -164,16 +167,12 @@
         const picksForm = document.getElementById('picksForm');
         const submitPicksBtn = document.getElementById('submitPicksBtn');
         const picksMessageContainer = document.getElementById('picksMessageContainer');
+        const shareMessageContainer = document.getElementById('shareMessageContainer');
 
         const scoreboardTableContainer = document.getElementById('scoreboard-table-container');
         const userIdDisplay = document.getElementById('userIdDisplay');
         const appErrorMessage = document.getElementById('appErrorMessage');
 
-        // Note: The "Submit Results" button was for an admin feature. For a secure, one-file app,
-        // it's best to handle admin-level functionality separately and not expose it to all users.
-        // This button has been removed for simplicity and security.
-
-        // Update GAMES to include team names for dropdown
         const GAMES = [
             { name: "Cowboys vs Eagles", teams: ["Cowboys", "Eagles"] },
             { name: "Chiefs vs Chargers", teams: ["Chiefs", "Chargers"] },
@@ -193,14 +192,13 @@
             { name: "Vikings vs Bears", teams: ["Vikings", "Bears"] }
         ];
 
-        // This object will hold the official game results to calculate scores
         let officialResults = {};
         
-        // Handle view switching
         function switchView(view) {
             picksContainer.classList.add('hidden');
             scoreboardContainer.classList.add('hidden');
             appErrorMessage.classList.add('hidden');
+            shareMessageContainer.classList.add('hidden');
 
             if (view === 'picks') {
                 picksContainer.classList.remove('hidden');
@@ -212,7 +210,34 @@
         showPicksBtn.addEventListener('click', () => switchView('picks'));
         showScoreboardBtn.addEventListener('click', () => switchView('scoreboard'));
 
-        // Generate form fields for player picks
+        shareAppBtn.addEventListener('click', async () => {
+            const url = window.location.href;
+            if (navigator.share) {
+                try {
+                    await navigator.share({
+                        title: 'NFL Pick \'Em League',
+                        url: url
+                    });
+                } catch (error) {
+                    console.error('Sharing failed', error);
+                }
+            } else {
+                // Fallback for browsers that don't support the Share API
+                const tempInput = document.createElement('textarea');
+                tempInput.value = url;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                try {
+                    document.execCommand('copy');
+                    displayMessage(shareMessageContainer, "Link copied to clipboard!", "success");
+                } catch (err) {
+                    displayMessage(shareMessageContainer, "Failed to copy link.", "error");
+                } finally {
+                    document.body.removeChild(tempInput);
+                }
+            }
+        });
+
         function generateFormFields() {
             gamesContainer.innerHTML = '';
             GAMES.forEach((game, index) => {
@@ -243,7 +268,6 @@
                 gamesContainer.appendChild(pickGameDiv);
             });
 
-            // Populate all confidence score dropdowns with 1-16
             const allConfidenceSelects = document.querySelectorAll('.confidence-score');
             allConfidenceSelects.forEach(select => {
                 for (let i = 1; i <= 16; i++) {
@@ -254,14 +278,11 @@
                 }
             });
 
-            // Add a single change listener to the form to handle unique scores
             picksForm.addEventListener('change', () => {
                 const selectedScores = Array.from(allConfidenceSelects).map(s => s.value).filter(val => val !== "");
                 allConfidenceSelects.forEach(select => {
                     Array.from(select.options).forEach(option => {
-                        // Re-enable all options first
                         option.disabled = false;
-                        // Then disable options that are already selected in other dropdowns
                         if (option.value !== select.value && selectedScores.includes(option.value)) {
                             option.disabled = true;
                         }
@@ -288,7 +309,6 @@
             }
         }
 
-        // Handle user authentication
         onAuthStateChanged(auth, async (user) => {
             if (user) {
                 userId = user.uid;
@@ -319,9 +339,7 @@
             container.classList.remove('hidden');
         }
 
-        // --- Firebase Listener Setup and Scoreboard Logic ---
         function setupListeners() {
-            // Listen for changes to the official results
             const officialResultsRef = doc(db, 'artifacts', appId, 'public', 'data', 'official_results', 'week1');
             onSnapshot(officialResultsRef, (docSnap) => {
                 if (docSnap.exists()) {
@@ -336,7 +354,6 @@
                 }
             });
 
-            // Listen for changes to all player picks for the scoreboard
             const allPicksRef = collection(db, 'artifacts', appId, 'public', 'data', 'all_picks');
             onSnapshot(allPicksRef, (querySnapshot) => {
                 const playersData = {};
@@ -351,8 +368,7 @@
                 }
             });
 
-            // Listen for changes to the current user's picks
-            if (userId) { // Ensure userId is set before attaching listener
+            if (userId) {
                 const currentUserPicksRef = doc(db, 'artifacts', appId, 'users', userId, 'picks', 'week1');
                 onSnapshot(currentUserPicksRef, (docSnap) => {
                     if (docSnap.exists()) {
@@ -430,7 +446,6 @@
             scoreboardTableContainer.innerHTML = tableHtml;
         }
 
-        // --- Form Submission Logic ---
         picksForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -464,7 +479,6 @@
                     };
                 }
 
-                // Save picks to both a private and public location
                 const privateDocRef = doc(db, 'artifacts', appId, 'users', userId, 'picks', 'week1');
                 await setDoc(privateDocRef, picks);
 
