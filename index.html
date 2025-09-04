@@ -291,9 +291,10 @@
         // Handle user authentication
         onAuthStateChanged(auth, async (user) => {
             if (user) {
+                // User is authenticated, set the userId
                 userId = user.uid;
-                userIdDisplay.textContent = `Your User ID: ${userId}`;
             } else {
+                // No user, attempt anonymous sign-in or use custom token
                 try {
                     if (initialAuthToken) {
                         await signInWithCustomToken(auth, initialAuthToken);
@@ -302,12 +303,16 @@
                     }
                 } catch (error) {
                     console.error("Firebase Auth Error:", error);
+                    // Fallback to a random UUID if authentication fails
                     userId = crypto.randomUUID();
-                    userIdDisplay.textContent = `Your User ID: ${userId}`;
                 }
+                // After auth attempt, get the user ID
+                userId = auth.currentUser?.uid || userId;
             }
+            // All authentication attempts have finished, so we are ready to set up listeners
             isAuthReady = true;
-            if (isAuthReady) {
+            userIdDisplay.textContent = `Your User ID: ${userId}`;
+            if (isAuthReady && userId) {
                 generateFormFields();
                 setupListeners();
             }
