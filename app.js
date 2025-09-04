@@ -6,12 +6,12 @@ import { getFirestore, doc, setDoc, collection, getDoc, onSnapshot } from "https
 // 🔹 STEP 1: Firebase Config
 // ==========================
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyAqWqbhUkxm-CXsqG1h8kMhrvpadBmfvuQ",
+  authDomain: "nfl-pick--em-a779e.firebaseapp.com",
+  projectId: "nfl-pick--em-a779e",
+  storageBucket: "nfl-pick--em-a779e.firebasestorage.app",
+  messagingSenderId: "416036401514",
+  appId: "1:416036401514:web:2dd7ea9a4a15f4dbeb3513",
 };
 
 const app = initializeApp(firebaseConfig);
