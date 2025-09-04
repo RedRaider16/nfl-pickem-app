@@ -140,16 +140,8 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDocs, collection, query, setLogLevel, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
-        // Firebase configuration from your project
-        const firebaseConfig = {
-          apiKey: "AIzaSyAqWqbhUkxm-CXsqG1h8kMhrvpadBmfvuQ",
-          authDomain: "nfl-pick--em-a779e.firebaseapp.com",
-          projectId: "nfl-pick--em-a779e",
-          storageBucket: "nfl-pick--em-a779e.firebasestorage.app",
-          messagingSenderId: "416036401514",
-          appId: "1:416036401514:web:2dd7ea9a4a15f4dbeb3513",
-          measurementId: "G-TW4K0TCGPD"
-        };
+        // Use the firebase config provided by the environment
+        const firebaseConfig = JSON.parse(__firebase_config);
         
         // Use provided global variables
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
