@@ -362,7 +362,7 @@
         // --- Firebase Listener Setup and Scoreboard Logic ---
         function setupListeners() {
             const officialResultsRef = doc(db, 'artifacts', appId, 'public', 'data', 'official_results', 'week1');
-            const playersRef = collection(db, 'artifacts', appId, 'users');
+            const allPicksRef = collection(db, 'artifacts', appId, 'public', 'data', 'all_picks');
             const currentUserPicksRef = doc(db, 'artifacts', appId, 'users', userId, 'picks', 'week1');
 
             let officialResults = {};
@@ -379,21 +379,13 @@
                 updateScoreboard(playersData, officialResults);
             });
 
-            // Listen for changes to all player picks
-            onSnapshot(playersRef, (querySnapshot) => {
+            // Listen for changes to all player picks for the scoreboard
+            onSnapshot(allPicksRef, (querySnapshot) => {
                 playersData = {};
                 querySnapshot.forEach((doc) => {
-                    const playerDocId = doc.id;
-                    const picksRef = doc(db, 'artifacts', appId, 'users', playerDocId, 'picks', 'week1');
-                    onSnapshot(picksRef, (picksSnap) => {
-                        if (picksSnap.exists()) {
-                            playersData[playerDocId] = picksSnap.data();
-                        } else {
-                            delete playersData[playerDocId];
-                        }
-                        updateScoreboard(playersData, officialResults);
-                    });
+                    playersData[doc.id] = doc.data();
                 });
+                updateScoreboard(playersData, officialResults);
             });
 
             // Listen for changes to the current user's picks
@@ -505,8 +497,12 @@
                     };
                 }
 
-                const docRef = doc(db, 'artifacts', appId, 'users', userId, 'picks', 'week1');
-                await setDoc(docRef, picks);
+                // Save picks to both a private and public location
+                const privateDocRef = doc(db, 'artifacts', appId, 'users', userId, 'picks', 'week1');
+                await setDoc(privateDocRef, picks);
+
+                const publicDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'all_picks', userId);
+                await setDoc(publicDocRef, picks);
 
                 displayMessage(picksMessageContainer, "Picks submitted successfully!", "success");
                 picksForm.reset();
